@@ -12,6 +12,12 @@ LIB_SHARED_DIR := $(LIB_DIR)/shared
 
 C_FLAGS := -I $(INC_DIR)
 
+create_dirs:
+	@mkdir -p $(SRC_DIR) $(INC_DIR)
+	@mkdir -p $(BIN_SHARED_DIR) $(BIN_STATIC_DIR)
+	@mkdir -p $(OBJ_DIR) $(OBJ_SHARED_DIR) $(OBJ_STATIC_DIR)
+	@mkdir -p $(LIB_DIR) $(LIB_STATIC_DIR) $(LIB_SHARED_DIR)
+
 create_objs:
 	# create object files for shared lib
 	gcc -c -fPIC $(SRC_DIR)/add.c    -o $(OBJ_SHARED_DIR)/add.o    $(C_FLAGS)
