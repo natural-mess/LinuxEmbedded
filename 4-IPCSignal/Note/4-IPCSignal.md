@@ -98,4 +98,111 @@ int sigaddset (sigset_t *set, int signo);
 int sigdelset (sigset_t *set, int signo);
 int sigismember (const sigset_t *set, int signo);
 ```
+In Linux, signals are asynchronous notifications sent to processes. Sometimes you don’t want a signal to interrupt your process immediately—instead, you might want to delay its handling. This is where blocking (and later unblocking) signals comes in, using a signal mask.
 
+- Blocking a signal means telling the kernel, “Do not deliver this signal to me right away.” When a signal is blocked, if it occurs (i.e., if some event triggers that signal), it is not delivered immediately to the process. Instead, it is marked as pending. Once the process unblocks the signal, the kernel will then deliver any pending signals.
+- Unblocking a signal removes it from the process’s block list, allowing the kernel to deliver it. Once unblocked, if that signal was pending (or if it happens afterward), it will be delivered and the process’s signal handler (if set) will be executed.
+
+A signal mask is a set (or list) of signals that a process (or thread) has currently blocked. It allows a process to specify which signals it wants to temporarily ignore (block) while performing critical operations.
+
+You can use functions like `sigprocmask()` to add signals to your mask (block them) or remove signals from your mask (unblock them).
+```c
+#include <signal.h>
+
+sigset_t set;
+sigemptyset(&set);             // Start with an empty set
+sigaddset(&set, SIGTERM);      // Add SIGTERM to the set
+sigprocmask(SIG_BLOCK, &set, NULL);  // Block SIGTERM
+```
+
+Similarly, you can remove signals from the mask.
+```c
+sigprocmask(SIG_UNBLOCK, &set, NULL);  // Unblock SIGTERM
+```
+
+`sigfillset()` initializes a signal set by adding all signals to it. It is typically used when you want to block all signals or start with a complete set of signals and then remove those you don't want.
+```c
+#include <signal.h>
+#include <stdio.h>
+
+int main() {
+    sigset_t set;
+    
+    // Fill the set with all signals.
+    if (sigfillset(&set) == -1) {
+        perror("sigfillset");
+        return 1;
+    }
+    
+    // Now, 'set' contains every possible signal.
+    printf("Signal set filled with all signals.\n");
+    return 0;
+}
+```
+
+`sigdelset()` removes a specified signal from a signal set. After filling a signal set with all signals (using sigfillset()) or after initializing it in another way, you might want to exclude one or more signals from being blocked or handled. sigdelset() lets you do that.
+```c
+#include <signal.h>
+#include <stdio.h>
+
+int main() {
+    sigset_t set;
+    
+    // First, fill the set with all signals.
+    if (sigfillset(&set) == -1) {
+        perror("sigfillset");
+        return 1;
+    }
+    
+    // Remove SIGTERM from the set.
+    if (sigdelset(&set, SIGTERM) == -1) {
+        perror("sigdelset");
+        return 1;
+    }
+    
+    // Now, 'set' contains all signals except SIGTERM.
+    printf("SIGTERM removed from the signal set.\n");
+    return 0;
+}
+```
+
+When to Use Signal Masks
+- Critical Sections: While executing a critical part of your code (e.g., modifying shared data), you might block certain signals to prevent them from interrupting your code.
+- Temporary Suspension: A process can block signals temporarily, perform its task without interruptions, then unblock the signals to handle any that were queued.
+
+Example:
+```c
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    sigset_t set;
+    
+    // Start with a set containing all signals.
+    if (sigfillset(&set) == -1) {
+        perror("sigfillset");
+        exit(EXIT_FAILURE);
+    }
+    
+    // Suppose we don't want to block SIGINT (Ctrl+C), remove it from the set.
+    if (sigdelset(&set, SIGINT) == -1) {
+        perror("sigdelset");
+        exit(EXIT_FAILURE);
+    }
+    
+    // Now block all signals in 'set' (i.e., all signals except SIGINT).
+    if (sigprocmask(SIG_BLOCK, &set, NULL) == -1) {
+        perror("sigprocmask");
+        exit(EXIT_FAILURE);
+    }
+    
+    printf("All signals except SIGINT are blocked.\n");
+    
+    // ... do critical work here ...
+    
+    return 0;
+}
+```
+
+When block 2 signals SIGINT and SIGTERM, these signals will be pushed in pending signal queue. When unblock these 2 signals, SIGINT will be handled first, then SIGTERM will be handled because SIGINT has lower priority number (number 2) meaning higher priority than SIGTERM.
