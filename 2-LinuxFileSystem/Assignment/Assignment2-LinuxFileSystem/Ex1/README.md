@@ -1,1 +1,0 @@
-Since we open text.txt as O_APPEND flag, this flag will force every write operation to append data at the end of the file, no matter what. Even if we use lseek(fd, 0, SEEK_SET) to move the cursor to the beginning of the file, the cursor will move back to the end of the file automatically.
