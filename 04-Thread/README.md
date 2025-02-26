@@ -376,7 +376,7 @@ int main(int argc, char const *argv[])
 
 Thread joining is when one thread waits for another thread to finish its work before moving on. It’s like telling a teammate, “I’ll wait here until you’re done, then we’ll continue together.”
 
-In C, you use the `pthread_join()` function to make this happen.
+In C, you use the `pthread_join()` function to make this happen. It’s about one thread (usually the main one) waiting for another thread to finish and then cleaning up after it.
 
 Why use thread joining?
 - Synchronization: You might need to wait for a thread to complete its task before the program does something else—like waiting for a calculation to finish before showing the result.
@@ -432,4 +432,525 @@ Thread starting... I’ll work for 2 seconds.
 [2-second pause]
 Thread finished!
 Main thread: The thread is done, I can move on now!
+```
+
+A thread zombie is a thread that has finished its work (it’s “dead”) but hasn’t been cleaned up yet because no one has “picked up its body.” It’s stuck in a limbo state, taking up a little space until another thread comes along to handle it.
+
+Without cleanup, these zombie threads pile up in the process’s memory, taking up space (not a lot, but it adds up if you make tons of threads).
+
+In technical terms: It’s a thread that has terminated (exited) but its resources (like its thread ID and exit status) are still hanging around in the system because it hasn’t been **joined**.
+
+This happens with pthreads when:
+    - A thread finishes its job (e.g., returns from its function or calls `pthread_exit()`).
+    - No other thread calls `pthread_join()` on it to collect its exit status and free its resources.
+
+Normally, `pthread_join()` “reaps” the thread—clears its remains and lets the system reuse its ID. Without joining, it lingers as a zombie.
+
+When a thread finishes (e.g., returns from its function or calls `pthread_exit()`), it doesn’t just vanish completely. Here’s why:
+- Resources Stay Behind: Even after a thread stops running, the system keeps some info about it—like its thread ID (TID) and its exit status (a value it might return, like “I computed 42”). This info sits in memory, managed by the process it belongs to.
+- The system holds onto this so another thread (like the main one) can check what happened—did it succeed? What did it return? It’s like leaving a note saying, “I’m done, here’s my result.”
+- If no one picks up that note (the exit status) and says, “Okay, we’re good,” that info stays in memory, and the thread becomes a zombie—finished but not fully gone.
+
+When you call `pthread_join(thread_id, NULL)`, the calling thread (e.g., main) pauses until the thread with thread_id finishes. This ensures you don’t move on too soon—like waiting for a teammate to finish their part of a project.
+
+Once that thread finishes, `pthread_join()` tells the system, “This thread’s done—free its resources.” It picks up the “note” (exit status), clears the thread’s ID, and removes it from the process’s list of threads. No zombie left behind.
+
+|Action|	Threads|	Processes|
+|------|-------------|-----------|
+|Ending|	pthread_exit() or return|	exit()|
+|What Ends Does|	Stops thread, leaves zombie|	Stops process, leaves zombie|
+|Cleaning|	pthread_join()|	wait()|
+|What Clean Does	|Waits, frees thread resources|	Waits, frees process entry|
+|Zombie	|Thread ID/status in process	|PID/status in process table|
+
+#### pthread_join()
+
+```c
+int pthread_join(pthread_t thread, void **retval);
+```
+
+`pthread_join()` will block until a thread terminates. If therad exit, `pthread_join` returns immediately.
+
+When the thread ends, it will be treated similarly to a zombie process. If the number of zombie thread is getting bigger and bigger, at some point, we won't be able to create more thread. The role of pthread_join() is similar to waitpid()
+
+Arguments:
+- thread: threadID of a specific thread
+- **retval: if retval is not NULL, it will get the return value of pthread_exit(). Returns 0 on success, less than 0 on failure.
+
+### Thread Detaching
+
+Thread detaching is when you tell a thread, “Go do your job, and when you’re done, clean yourself up—I won’t wait for you.” It’s like sending a worker off on a task and saying, “Don’t report back—just disappear when you’re finished.”
+
+You don’t need another thread (like the main one) to wait for it to finish with `pthread_join()`. It’s perfect for “fire-and-forget” tasks where you don’t care when or how it ends.
+
+A detached thread automatically cleans up its resources (like its thread ID and exit status) when it finishes—no thread zombie lingers, unlike a joined thread that needs `pthread_join()` for cleanup.
+
+If you’re creating lots of threads and don’t need their results or timing, detaching keeps things tidy without extra code.
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h> // For sleep()
+
+// Thread function
+void* thread_function(void* arg) {
+    printf("Thread: Starting... I’ll work for 2 seconds.\n");
+    sleep(2); // Simulate work
+    printf("Thread: Done!\n");
+    return NULL; // Exit status ignored since it’s detached
+}
+
+int main() {
+    pthread_t my_thread;
+
+    // Create a thread
+    if (pthread_create(&my_thread, NULL, thread_function, NULL) != 0) {
+        printf("Error creating thread!\n");
+        return 1;
+    }
+
+    // Detach the thread
+    if (pthread_detach(my_thread) != 0) {
+        printf("Error detaching thread!\n");
+        return 1;
+    }
+
+    printf("Main: Thread is detached, I won’t wait for it.\n");
+    sleep(3); // Wait a bit to see the thread finish, then exit
+    printf("Main: Exiting.\n");
+    return 0;
+}
+```
+
+|Aspect|	Joining (pthread_join())	|Detaching (pthread_detach())|
+|------|-------------------------------|---------------------|
+|Waiting|	Yes—waits for thread to finish|	No—main keeps going|
+|Cleanup|	Manual—pthread_join()| cleans it	Automatic—thread cleans itself|
+|Zombie|	Yes, if not joined|	No zombies ever|
+|Return Value|	Can collect it (e.g., retval)	|Ignored—no way to get it|
+|Use Case|	Need result or timing control|	Fire-and-forget tasks|
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+
+pthread_t thread_id1, thread_id2, thread_id3;
+
+typedef struct {
+    char name[30];
+    char msg[30];
+} thr_data_t;
+
+static void *thr_handle1(void *args)
+{
+    thr_data_t *thr = (thr_data_t *)args;
+    sleep(1);
+    printf("hello %s !\n", thr->name);
+    printf("thread1 handler\n");
+
+    pthread_exit(NULL); // exit
+
+}
+
+static void *thr_handle2(void *args)
+{
+    sleep(5);
+    //pthread_exit(NULL); // exit
+    //exit(1);
+    while (1) {
+     	printf("thread2 handler\n"); 
+   	    sleep(1);
+    };
+}
+
+static void *thr_handle3(void *args)
+{
+    pthread_detach(pthread_self());
+    //sleep(2);
+    //pthread_exit(NULL);
+}
+
+int main(int argc, char const *argv[])
+{
+    /* code */
+    int ret, counter = 0;
+    int retval;
+    thr_data_t data = {0};
+
+    strncpy(data.name, "phonglt9", sizeof(data.name));                 
+    strncpy(data.msg, "Posix thread programming\n", sizeof(data.msg));
+
+    if (ret = pthread_create(&thread_id1, NULL, &thr_handle1, &data)) {
+        printf("pthread_create() error number=%d\n", ret);
+        return -1;
+    }
+
+    if (ret = pthread_create(&thread_id2, NULL, &thr_handle2, NULL)) {
+        printf("pthread_create() error number=%d\n", ret);
+        return -1;
+    }
+    
+    //sleep(5);
+    //pthread_cancel(thread_id2);
+    //pthread_join(thread_id2, NULL);
+    //printf("thread_id2 termination\n"); 
+    while (1) {
+	    if (ret = pthread_create(&thread_id3, NULL, &thr_handle3, NULL)) {
+        	printf("pthread_create() error number=%d\n", ret);
+        	break;
+    	}
+	    counter++;
+  	    //pthread_join(thread_id3, NULL);
+
+        if (counter%1000 == 0) {
+            printf("Thread created: %d\n", counter);
+        }
+    }   
+
+    return 0;
+}
+```
+
+`pthread_cancel() `is a function that lets you tell a thread, “Stop what you’re doing and end now.” It’s like calling a worker over the radio and saying, “Drop everything and clock out.”
+
+It’s a way to forcefully terminate a thread from outside, instead of waiting for it to finish naturally (e.g., by returning or calling `pthread_exit()`).
+
+You might need to kill a thread that’s stuck, taking too long, or no longer needed—like shutting down a task when a program is closing.
+
+It’s useful when a thread is in a loop or waiting forever, and you can’t rely on it to stop on its own.
+
+Gives you a way to manage threads that don’t have a built-in “stop” signal.
+
+It sends a cancellation request to the target thread.
+
+The thread doesn’t stop instantly—it stops at specific points (called cancellation points) where it checks for this request.
+
+If the thread reaches a cancellation point and the request is active, it exits cleanly, running any cleanup handlers you’ve set up (if any).
+
+## 5 - Thread synchronization
+
+**Atomic** means something happens all at once, as a single, unbreakable step—like flipping a light switch. It either fully happens or doesn’t happen at all; there’s no “halfway” state.
+
+In programming, an atomic operation is one that can’t be interrupted or split up by other threads or processes.
+
+When multiple threads or processes are running, they might try to change the same thing (like a variable) at the same time. Atomic operations ensure no one steps on anyone else’s toes—it’s done in one clean move.
+
+**Non-atomic** means an operation can be interrupted or split into smaller steps—like pouring water into a glass slowly. Another thread can jump in before it’s done, causing confusion.
+
+Most regular operations (e.g., x = x + 1) are non-atomic unless you make them atomic.
+
+Non-atomic operations can lead to race conditions—where the outcome depends on who runs first, and things get messed up if threads overlap.
+
+A **critical section** is a piece of code that accesses or changes a shared resource (like a variable or file) and needs to run without interruption—like a “do not disturb” zone.
+
+Only one thread (or process) should be in a critical section at a time to avoid conflicts.
+
+If two threads enter a critical section at once, they might overwrite each other’s changes or read half-updated data (a race condition). Protecting it ensures safety.
+
+A **shared resource** is anything (like a variable, file, or memory) that multiple threads or processes can use—like a whiteboard everyone can write on.
+
+In threads, shared resources are automatic (they share the process’s memory). In processes, you set them up (e.g., shared memory).
+
+Sharing is powerful—threads can work together—but dangerous if not controlled. Unprotected access leads to conflicts (race conditions).
+
+|Term|	Definition|	Why It Matters|	Example|
+|----|------------|--------------|---------|
+|Atomic	|Single, uninterruptible step|	Prevents race conditions|	atomic_add(&x, 1)|
+|Non-Atomic|	Can be interrupted, multi-step|	Risks conflicts without protection	|x = x + 1|
+|Critical Section|	Code needing exclusive access|	Protects shared resources|	Locked count++|
+|Shared Resources|	Data used by multiple threads/processes|	Enables teamwork, needs safety|Variable balance|
+
+## 6 - Thread Sync-Mutex Lock
+
+**Mutex** stands for mutual exclusion. It’s like a lock on a door that only one person (thread) can hold at a time. If you have the lock, you can go in; if not, you wait until it’s free.
+
+In programming, a mutex is a tool to make sure only one thread can run a specific piece of code (a critical section) or access a shared resource at a time, preventing conflicts.
+
+When multiple threads share something—like a variable or file—they might step on each other’s toes. For example, two threads adding to a counter at the same time could mess it up (a race condition).
+
+A mutex ensures only one thread gets access at a time, keeping things safe and orderly—like making sure only one person writes on a shared whiteboard.
+
+- Locking: A thread “locks” the mutex before touching the shared resource or running the critical section. If it’s already locked, the thread waits.
+- Unlocking: When the thread is done, it “unlocks” the mutex, letting another thread take over.
+- One at a Time: Only one thread holds the lock—others queue up until it’s their turn.
+
+Key Functions (in `pthreads`)
+- `pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr)`: Sets up a mutex (creates the lock).
+- `pthread_mutex_lock(pthread_mutex_t *mutex)`: Locks the mutex (grabs the key).
+- `pthread_mutex_unlock(pthread_mutex_t *mutex)`: Unlocks it (releases the key).
+- `pthread_mutex_destroy(pthread_mutex_t *mutex)`: Cleans up the mutex when you’re done.
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+
+// Shared resource
+int counter = 0;
+
+// Mutex to protect the counter
+pthread_mutex_t mutex;
+
+void* increment_counter(void* arg) {
+    for (int i = 0; i < 1000; i++) {
+        pthread_mutex_lock(&mutex);   // Lock the mutex
+        counter++;                    // Critical section: increment counter
+        pthread_mutex_unlock(&mutex); // Unlock the mutex
+    }
+    return NULL;
+}
+
+int main() {
+    pthread_t thread1, thread2;
+
+    // Initialize the mutex
+    pthread_mutex_init(&mutex, NULL);
+
+    // Create two threads
+    pthread_create(&thread1, NULL, increment_counter, NULL);
+    pthread_create(&thread2, NULL, increment_counter, NULL);
+
+    // Wait for threads to finish
+    pthread_join(thread1, NULL);
+    pthread_join(thread2, NULL);
+
+    // Clean up the mutex
+    pthread_mutex_destroy(&mutex);
+
+    printf("Final counter value: %d\n", counter);
+    return 0;
+}
+```
+
+Example 2:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+
+pthread_mutex_t lock1 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lock2 = PTHREAD_MUTEX_INITIALIZER;
+int counter = 2; // shared variable/shared resources/global variable
+
+typedef struct {
+    char name[30];
+    char msg[30];
+} thread_args_t;
+
+static void *handle_th1(void *args) 
+{   
+
+    thread_args_t *thr = (thread_args_t *)args;
+    //sleep(1);
+
+    pthread_mutex_lock(&lock1);
+    // critical section 
+    printf("hello %s !\n", thr->name);
+    printf("thread1 handler, counter: %d\n", ++counter);
+    sleep(5);
+
+    pthread_mutex_unlock(&lock1);
+
+    pthread_exit(NULL); // exit
+
+}
+
+static void *handle_th2(void *args) 
+{
+    pthread_mutex_lock(&lock1);
+    printf("thread2 handler, counter: %d\n", ++counter);
+    pthread_mutex_unlock(&lock1);
+
+    pthread_exit(NULL); // exit
+}
+
+int main(int argc, char const *argv[])
+{
+    /* code */
+    int ret;
+    thread_args_t thr;
+    pthread_t thread_id1, thread_id2;
+
+    memset(&thr, 0x0, sizeof(thread_args_t));
+    strncpy(thr.name, "phonglt9", sizeof(thr.name));
+
+    if (ret = pthread_create(&thread_id1, NULL, &handle_th1, &thr)) {
+        printf("pthread_create() error number=%d\n", ret);
+        return -1;
+    }
+
+    if (ret = pthread_create(&thread_id2, NULL, &handle_th2, NULL)) {
+        printf("pthread_create() error number=%d\n", ret);
+        return -1;
+    }
+    
+    // used to block for the end of a thread and release
+    pthread_join(thread_id1,NULL);  
+    pthread_join(thread_id2,NULL);
+
+    return 0;
+}
+```
+
+## 7 - Thread Sync- Conditional Variable
+
+A condition variable is like a waiting room with a bell. It lets threads wait until something they need happens—like waiting for a delivery before starting work—and then wake up when it’s ready.
+
+In programming, it’s a tool to make threads pause (wait) until a specific condition is true (e.g., “data is ready”) and get notified when that condition changes.
+
+Synchronization: Threads often need to coordinate:
+    - One thread might produce something (e.g., data).
+    - Another thread waits to use it.
+    You don’t want the waiting thread to keep checking (“Is it ready yet?”)—that wastes CPU. - A condition variable lets it sleep until signaled.
+
+Efficiency: Instead of busy-waiting (looping and checking), threads wait passively and wake up only when needed.
+
+A condition variable works with a mutex (a lock) to manage shared resources safely. Here’s the basic flow:
+- Wait: A thread locks the mutex, checks a condition (e.g., “Is the data here?”). If false, it waits on the condition variable, unlocking the mutex while it sleeps.
+- Signal: Another thread changes the condition (e.g., “Data is here!”), locks the mutex, and rings the bell (signals the condition variable) to wake the waiting thread.
+- Wake Up: The waiting thread wakes up, re-locks the mutex, and proceeds.
+
+Key Functions (in `pthreads`)
+- `pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)`: Sets up the condition variable.
+- `pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)`: Waits for a signal, unlocking the mutex while waiting.
+- `pthread_cond_signal(pthread_cond_t *cond)`: Wakes up one waiting thread.
+- `pthread_cond_broadcast(pthread_cond_t *cond)`: Wakes up all waiting threads.
+- `pthread_cond_destroy(pthread_cond_t *cond)`: Cleans up the condition variable.
+
+Example 1:
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+
+// Shared resource
+int data = 0;
+int data_ready = 0; // Condition flag
+
+// Mutex and condition variable
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
+void* producer(void* arg) {
+    sleep(2); // Simulate work
+    pthread_mutex_lock(&mutex); // Lock to update shared data
+    data = 42;                  // Produce data
+    data_ready = 1;             // Set condition true
+    printf("Producer: Data is ready (%d)\n", data);
+    pthread_cond_signal(&cond); // Signal waiting thread
+    pthread_mutex_unlock(&mutex);
+    return NULL;
+}
+
+void* consumer(void* arg) {
+    pthread_mutex_lock(&mutex); // Lock to check condition
+    while (!data_ready) {       // Wait if data isn’t ready
+        printf("Consumer: Waiting for data...\n");
+        pthread_cond_wait(&cond, &mutex); // Wait and unlock mutex
+    }
+    printf("Consumer: Got data (%d)\n", data);
+    pthread_mutex_unlock(&mutex);
+    return NULL;
+}
+
+int main() {
+    pthread_t prod, cons;
+
+    pthread_create(&prod, NULL, producer, NULL);
+    pthread_create(&cons, NULL, consumer, NULL);
+
+    pthread_join(prod, NULL);
+    pthread_join(cons, NULL);
+
+    return 0;
+}
+```
+
+Output:
+
+```
+Consumer: Waiting for data...
+[2-second pause]
+Producer: Data is ready (42)
+Consumer: Got data (42)
+```
+
+Example 2:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+
+#define THRESHOLD   5
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+int counter; // critical section <=> global resource
+
+typedef struct {
+    char name[30];
+    char msg[30];
+} thread_args_t;
+
+static void *handle_th1(void *args) 
+{
+    thread_args_t *thr = (thread_args_t *)args;
+
+    pthread_mutex_lock(&lock);
+    printf("Hello %s !\n", thr->name);
+
+    while (counter <= THRESHOLD) {
+        counter += 1;
+        printf("Counter = %d\n", counter);
+        sleep(1);
+    }
+
+    pthread_cond_signal(&cond);
+    printf("thread1 handler, counter = %d\n", counter);
+    pthread_mutex_unlock(&lock);
+
+    pthread_exit(NULL); // exit or return;
+
+}
+
+int main(int argc, char const *argv[])
+{
+    /* code */
+    int ret;
+    thread_args_t thr;
+    pthread_t thread_id1, thread_id2;
+
+    memset(&thr, 0x0, sizeof(thread_args_t));
+    strncpy(thr.name, "phonglt9", sizeof(thr.name));
+
+    if (ret = pthread_create(&thread_id1, NULL, &handle_th1, &thr)) {
+        printf("pthread_create() error number=%d\n", ret);
+        return -1;
+    }
+
+    pthread_mutex_lock(&lock);
+    while (1) {
+        // ready in advance when pthread_cond_signal() is called
+        pthread_cond_wait(&cond, &lock);
+        if(counter == THRESHOLD) {
+           printf("Global variable counter = %d.\n", counter);
+           break;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    
+    // used to block for the end of a thread and release
+    pthread_join(thread_id1,NULL); 
+
+    return 0;
+}
 ```
