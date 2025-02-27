@@ -7,6 +7,35 @@
 **Questions:** How are `pthread_create` and `pthread_join` used? When does a thread terminate?  
 **Hint:** Use `pthread_create` to create threads and `pthread_join` to wait for the threads to finish.
 
+`pthread_create` is called twice to make two separate threads:
+- Thread 1 runs `thr_handler` with order = 1.
+- Thread 2 runs `thr_handler` with order = 2.
+
+The thread variable acts as a flag to tell each thread which one it is (1 or 2). Main passes `&thread` (its address) so each thread can read the value at that moment:
+- Thread 1 sees 1 (before thread changes).
+- Thread 2 sees 2 (after thread is updated).
+
+A thread terminates when it:
+- Returns from its function: In `thr_handler`, return `NULL`; ends the thread.
+- Calls `pthread_exit()`: Explicitly stops it (not used here, but similar effect).
+- Once it ends, its resources (like its ID) linger until joined or detached.
+
+Both threads terminate before pthread_join in this case (due to sleep(2) delays in main), but pthread_join still:
+- Waits if they’re not done yet (not needed here—they’re fast).
+- Cleans up their resources (no zombies).
+
+To run the code:
+
+```bash
+cd Ex1/
+```
+```bash
+make all
+```
+```bash
+./threadBasic
+```
+
 ---
 
 ## Exercise 2. Thread Synchronization with Mutex
@@ -18,6 +47,33 @@
 **Question:** Why is a mutex necessary in this exercise? What happens if the mutex is removed?  
 **Hint:** Use `pthread_mutex_lock` and `pthread_mutex_unlock` to lock and unlock the mutex when accessing the `counter`.
 
+`counter++`: This looks like one operation, but it’s non-atomic—it’s actually three steps:
+- Read counter’s current value.
+- Add 1 to it.
+- Write the new value back.
+
+Concurrency: These threads run at the same time (multi-core) or switch rapidly (single-core). Without control, they can overlap these steps, leading to a race condition.
+
+Example :
+- Starting counter = 0.
+- Thread 1: Reads 0, prepares to write 1.
+- Thread 2: Reads 0 (before Thread 1 writes), prepares to write 1.
+- Thread 3: Reads 0 (still 0), prepares to write 1.
+- All write 1—counter becomes 1, but three increments happened!
+- Lost Updates: Only one increment sticks; the others are overwritten.
+
+To run the code:
+
+```bash
+cd Ex2/
+```
+```bash
+make all
+```
+```bash
+./threadSyncMutex
+```
+
 ---
 
 ## Exercise 3. Using Condition Variables
@@ -27,6 +83,8 @@
 - Use `pthread_cond_wait` and `pthread_cond_signal` to synchronize the producer and consumer, ensuring the consumer only reads data after the producer has provided it.  
 - Repeat the process 10 times and print all values read by the consumer.  
 **Hint:** Use `pthread_cond_wait` to make the consumer wait until the producer signals that the data is ready.
+
+
 
 ---
 
