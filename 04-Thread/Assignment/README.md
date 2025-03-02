@@ -84,7 +84,28 @@ make all
 - Repeat the process 10 times and print all values read by the consumer.  
 **Hint:** Use `pthread_cond_wait` to make the consumer wait until the producer signals that the data is ready.
 
+`sleep(1)` is added in for loop of producer because if the producer runs first, it may generate data and send a signal before the consumer even calls `pthread_cond_wait()`.
+The consumer never sees the signal and stays blocked forever. Adding `sleep(1)` in the producer allows time for the consumer to start first and enter `pthread_cond_wait()`, ensuring that no signals are missed.
 
+```c
+pthread_mutex_lock(&mutex);
+pthread_cond_signal(&cond);  // Send a "wake-up" signal
+pthread_mutex_unlock(&mutex);
+```
+This final signal is added at the end of the producer because when producer sends the 10th signal, at that exact moment, the consumer is still printing the 9th message.
+The consumer hasn't reached `pthread_cond_wait()` yet. The producer exits after sending the last signal. The consumer finally reaches `pthread_cond_wait()` but there is no producer left to send another signal → The consumer gets stuck!
+
+This last signal ensures that even if the consumer missed a signal, it still wakes up and exits correctly.
+
+```bash
+cd Ex3/
+```
+```bash
+make all
+```
+```bash
+./varCond
+```
 
 ---
 
@@ -96,6 +117,15 @@ make all
 - Use `pthread_join` to ensure the program only terminates after both threads complete their tasks.  
 **Hint:** Each thread handles a distinct task, so a mutex is not needed in this exercise.
 
+```bash
+cd Ex4/
+```
+```bash
+make all
+```
+```bash
+./evenOddCount
+```
 ---
 
 ## Exercise 5. Resource Sharing with Read-Write Lock
@@ -108,6 +138,50 @@ make all
 - Print the value of `data` after all threads complete.  
 **Hint:** Use `pthread_rwlock_rdlock` and `pthread_rwlock_wrlock` for synchronized read-write operations.
 
+A read-write lock (`pthread_rwlock_t`) is a special kind of lock that handles two types of access to shared data:
+- Reading: Multiple threads can read at the same time (safe—no changes).
+- Writing: Only one thread can write at a time (exclusive—changes data).
+
+`pthread_rwlock_rdlock`
+- What it does: Locks the read-write lock for reading—lets a thread access shared data without changing it.
+- Key feature: Multiple threads can hold a read lock at once—reading is shared.
+
+`pthread_rwlock_wrlock`
+- What it does: Locks the read-write lock for writing—lets a thread modify shared data.
+- Key feature: Only one thread can hold a write lock, and no readers can access it during writing—exclusive access.
+
+Read Lock (rdlock):
+- Many threads can call pthread_rwlock_rdlock—they all get in if no writer is active.
+- Blocks if a writer holds the lock (waits until writer finishes).
+
+Write Lock (wrlock):
+- Only one thread can call pthread_rwlock_wrlock—gets exclusive access.
+- Blocks if any readers or another writer hold the lock (waits until all clear).
+
+- `pthread_rwlock_rdlock(pthread_rwlock_t *rwlock)`: Locks for reading.
+- `pthread_rwlock_wrlock(pthread_rwlock_t *rwlock)`: Locks for writing.
+- `pthread_rwlock_unlock(pthread_rwlock_t *rwlock)`: Unlocks (works for both read and write locks).
+- `pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr)`: Sets up the lock.
+- `pthread_rwlock_destroy(pthread_rwlock_t *rwlock)`: Cleans it up.
+
+**Why Not Just a Mutex?**
+- Mutex: Only one thread at a time (read or write)—slow if many readers.
+- Read-Write Lock:
+    - Many readers at once—faster for frequent reads.
+    - Exclusive writing—safe for updates.
+
+Use Case: Good when reads outnumber writes (e.g., database lookups vs. updates).
+
+```bash
+cd Ex5/
+```
+```bash
+make all
+```
+```bash
+./readWriteLock
+```
+
 ---
 
 ## Exercise 6. Calculate Array Sum with Threads and Mutex
@@ -117,3 +191,13 @@ make all
 - Use a global sum variable and a mutex to aggregate results from all threads.  
 - Print the total sum of the array after the threads complete.  
 **Hint:** Use `pthread_mutex_lock` to protect the global sum variable when threads add their results.
+
+```bash
+cd Ex6/
+```
+```bash
+make all
+```
+```bash
+./sumArrMutex
+```

@@ -1,4 +1,4 @@
-# Ex2
+# Ex3
 
 .PHONY := all clean
 
