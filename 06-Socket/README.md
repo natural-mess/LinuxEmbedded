@@ -359,6 +359,8 @@ The number 0x1234 (hexadecimal):
 - Big endian: Stored as 12 34 (bytes).
 - Little endian: Stored as 34 12.
 
+![alt text](image.png)
+
 ```
 which ls
 ```
