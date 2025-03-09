@@ -1,4 +1,4 @@
-# 7 - Pipes and FIFO
+# Lesson 7 - Pipes and FIFO
 
 ## 1 - Introduction
 
