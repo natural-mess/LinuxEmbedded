@@ -10,8 +10,11 @@ int main(int argc, char *argv[])
         printf("No port provided\ncommand: ./server <port number>\n");
         exit(EXIT_FAILURE);
     }
-    system("clear");
+    // system("clear");
     portNum = atoi(argv[1]);
+
+    /* Start socket as a server */
+    server_socketStart(portNum);
 
     /* Print instruction */
     ui_start();
