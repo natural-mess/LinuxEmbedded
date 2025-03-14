@@ -29,6 +29,8 @@ void ui_start(void)
 void ui_commandHandler(void)
 {
     char command[BUFF_SIZE];
+    char *ipAddr;
+    int portNum;
     while(1)
     {
         printf("Enter your command: ");
@@ -48,15 +50,19 @@ void ui_commandHandler(void)
         }
         else if (!strcmp(token, cmd_myip))
         {
-
+            printf("%lu\n", server_getServerAddr());
         }
         else if (!strcmp(token, cmd_myport))
         {
-
+            printf("%d\n", server_getPort());
         }
         else if (!strcmp(token, cmd_connect))
         {
-
+            token = strtok(NULL, " "); // Get the next token
+            ipAddr = token;
+            token = strtok(NULL, " "); // Get the next token
+            portNum = atoi(token);
+            client_socketStart(portNum, ipAddr);
         }
         else if (!strcmp(token, cmd_list))
         {
@@ -72,6 +78,7 @@ void ui_commandHandler(void)
         }
         else if (!strcmp(token, cmd_exit))
         {
+            printf("Chat application exiting...\n");
             break;
         }
         else
