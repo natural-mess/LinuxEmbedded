@@ -74,6 +74,24 @@ void ui_commandHandler(void);
 /*
  * Server drivers
  */
+/** @brief Get server IP address
+ *
+ *  Return server's IP address if requested by user
+ *
+ *  @param none
+ *  @return unsigned long.
+ */
+unsigned long server_getServerAddr(void);
+
+/** @brief Get server port
+ *
+ *  Return server's port if requested by user
+ *
+ *  @param none
+ *  @return unsigned short.
+ */
+unsigned short server_getPort(void);
+
 /** @brief Start a socket server on provided port number
  *
  *  If the port number is not valid, an error message will be printed, 
@@ -95,6 +113,6 @@ void server_socketStart(int portNum);
  *  @param portNum Port number to start socket client on.
  *  @return Void.
  */
-void client_socketStart(int portNum);
+void client_socketStart(int portNum, char* ipAddr);
 
 #endif /* _CHAT_H */
