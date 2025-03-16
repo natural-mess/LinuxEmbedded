@@ -101,6 +101,13 @@ The project is organized into the following directories and files:
 
 Initializes the server socket with a user-specified port and spawns a detached UI thread.
 
+- `pthread_create(&ui_thread, NULL, (void *(*)(void *))ui_commandHandler, NULL)`:
+    - Creates a new thread that runs ui_commandHandler().
+    - The `(void *(*)(void *))` cast is needed because `pthread_create()` expects a function pointer of type `void* (*)(void*)`, and `ui_commandHandler()` matches this signature (takes no arguments, returns nothing meaningful).
+- If this fails, it exits with an error message via `perror()` and `exit(EXIT_FAILURE)`.
+- `pthread_detach(ui_thread)`: Makes the ui_thread independent, meaning its resources are automatically freed when it terminates, and `main()` doesn’t need to `pthread_join()` it. This is crucial because `main()` doesn’t wait for the UI thread to finish—it just keeps running.
+- Keeps the `main()` thread alive indefinitely, preventing the program from exiting prematurely. `sleep(1)` reduces CPU usage by pausing the thread for 1 second per iteration (instead of a busy loop).
+
 ### `chatDrv/chat.c`
 
 Manages client connections and provides thread-safe message sending/receiving functions.

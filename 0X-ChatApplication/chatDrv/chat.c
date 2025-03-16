@@ -1,3 +1,13 @@
+/** @file chat.c
+ *  @brief Chat driver.
+ *
+ *  This file contains function definitions of 
+ *  communication functionality of this chat application
+ *
+ *  @author Phuc
+ *  @bug No know bugs.
+ */
+
 #include "../include/chat.h"
 
 ClientInfo clients[MAX_CLIENTS];
@@ -20,7 +30,11 @@ void *chat_thread(void *arg)
     {
         if (clients[i].socket_fd == socket_fd)
         {
-            clients[i] = clients[client_count - 1];
+            /* Shift all later entries left */
+            for (int j = i; j < client_count - 1; j++)
+            {
+                clients[j] = clients[j + 1];
+            }
             client_count--;
             printf("\nConnection %d terminated\n", i + 1);
             break;

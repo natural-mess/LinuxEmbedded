@@ -43,6 +43,7 @@
 #define LISTEN_BACKLOG  50
 #define MAX_CLIENTS     10
 #define BUFF_SIZE       256
+#define MSG_SIZE        100
 #define handle_error(msg) \
     do { perror(msg); exit(EXIT_FAILURE); } while (0)
  
@@ -94,7 +95,7 @@ void ui_listClientConnection(void);
  *  @param none
  *  @return Void.
  */
-void ui_commandHandler(void);
+void *ui_commandHandler(void *arg);
 
 /** @brief Start User Interface of app
  *
@@ -125,14 +126,6 @@ unsigned long server_getServerAddr(void);
  *  @return unsigned short.
  */
 unsigned short server_getPort(void);
-
-/** @brief Start thread for each connected client
- *
- *  @param client_fd   socket fd of client
- *  @param client_addr address of client
- *  @return Void.
- */
-void server_startClientThread(int client_fd, struct sockaddr_in client_addr);
 
 /** @brief Start a socket server on provided port number
  *

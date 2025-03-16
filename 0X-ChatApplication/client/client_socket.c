@@ -25,8 +25,7 @@ void client_socketStart(const char *server_ip, int portNum)
     serv_addr.sin_port = htons(portNum);
     if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0)
     {
-        perror("Invalid IP address");
-        return;
+        handle_error("Invalid IP address");
     }
 
     /* Create socket */
@@ -43,30 +42,29 @@ void client_socketStart(const char *server_ip, int portNum)
     }
     printf("Connected to %s:%d\n", server_ip, portNum);
 
-    /* Handshake: Receive server's listening port */
+    /* Receive server's listening port */
     char buffer[BUFF_SIZE];
     if (chat_receiveMessage(sock_fd, buffer, BUFF_SIZE) <= 0)
     {
-        perror("Failed to receive server port");
         close(sock_fd);
-        return;
+        handle_error("Failed to receive server port");
     }
     int server_port = 0;
+    /* Extract received data from server, store it in server_port */
     if (sscanf(buffer, "PORT %d", &server_port) != 1)
     {
-        printf("Invalid port handshake from server\n");
         close(sock_fd);
-        return;
+        handle_error("Invalid port handshake from server\n");
     }
 
     /* Send client's listening port */
     char port_msg[32];
+    /* Prepare data with format "PORT %d" and send to server */
     snprintf(port_msg, sizeof(port_msg), "PORT %d", server_getPort());
     if (chat_sendMessage(sock_fd, port_msg) == -1)
     {
-        perror("Failed to send port to server");
         close(sock_fd);
-        return;
+        handle_error("Failed to send port to server");
     }
 
     /* Add to clients list */
@@ -92,18 +90,17 @@ void client_socketStart(const char *server_ip, int portNum)
     ClientData *data = malloc(sizeof(ClientData));
     if (!data)
     {
-        perror("malloc failed");
         close(sock_fd);
-        return;
+        handle_error("malloc failed");
     }
     data->socket_fd = sock_fd;
+    /* Create a connection as a client, so is_server is 0 */
     data->is_server = 0;
     if (pthread_create(&chat_thread_id, NULL, chat_thread, data) != 0)
     {
-        perror("chat thread failed");
         free(data);
         close(sock_fd);
-        return;
+        handle_error("chat thread failed");
     }
     pthread_detach(chat_thread_id);
 }

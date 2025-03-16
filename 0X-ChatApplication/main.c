@@ -1,3 +1,15 @@
+/** @file main.c
+ *  @brief main program.
+ *
+ *  This file contains main function
+ *  This function only takes input from user,
+ *  starts socket, create thread for UI command handler,
+ *  then goes to sleep
+ *
+ *  @author Phuc
+ *  @bug No know bugs.
+ */
+
 #include "include/chat.h"
 
 int server_fd = -1;  // Global for myport, terminate
@@ -19,9 +31,9 @@ int main(int argc, char *argv[])
     /* Print instruction */
     ui_start();
 
-    /* Command handler */
+    /* Create thread for command handler */
     pthread_t ui_thread;
-    if (pthread_create(&ui_thread, NULL, (void *(*)(void *))ui_commandHandler, NULL) != 0)
+    if (pthread_create(&ui_thread, NULL, ui_commandHandler, NULL) != 0)
     {
         perror("UI thread creation failed");
         exit(EXIT_FAILURE);
@@ -31,7 +43,9 @@ int main(int argc, char *argv[])
     // Main thread could handle other tasks or just wait
     while (1)
     {
-        sleep(1);  // Prevent main from exiting immediately
+        /* Reduces CPU usage by pausing the thread for 1 second per iteration */
+        /* Prevent main from exiting immediately */
+        sleep(1);
     }
 
     return 0;
