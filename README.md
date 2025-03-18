@@ -11,4 +11,5 @@
 0. **[Mini Project: Chat Application](0X-ChatApplication)**  
 0. [IPC Shared memory](08-IPC-SharedMemory)
 0. [IPC Message Queues](09-IPC-MessageQueues)  
+0. [IPC Semaphore](10-IPC-Semaphore)  
 
