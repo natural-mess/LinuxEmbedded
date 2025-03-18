@@ -1,6 +1,6 @@
 # Chat Application
 
-This document provides a detailed overview of a multi-threaded TCP-based chat application developed as part of COMP429 Assignment 1. The application allows multiple machines to connect, exchange messages, and manage connections via a command-line interface.
+This document provides a detailed overview of a multi-threaded TCP-based chat application. The application allows multiple machines to connect, exchange messages, and manage connections via a command-line interface.
 
 ## Table of Contents
 
