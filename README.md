@@ -9,5 +9,6 @@
 0. [Socket](06-Socket)  
 0. [IPC Pipe](07-IPC-Pipe)  
 0. **[Mini Project: Chat Application](0X-ChatApplication)**  
-0. [IPC Shared memory](08-IPC-SharedMemory)  
+0. [IPC Shared memory](08-IPC-SharedMemory)
+0. [IPC Message Queues](09-IPC-MessageQueues)  
 
