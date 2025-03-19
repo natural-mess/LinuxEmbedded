@@ -12,4 +12,4 @@
 0. [IPC Shared memory](08-IPC-SharedMemory)
 0. [IPC Message Queues](09-IPC-MessageQueues)  
 0. [IPC Semaphore](10-IPC-Semaphore)  
-
+0. **[Final Project: Sensor Monitoring System](XX-SensorMonitoringSystem)**  
