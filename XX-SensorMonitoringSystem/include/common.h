@@ -11,20 +11,33 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <pthread.h>
 
-/* Node format */
-typedef struct 
+// Sensor data group
+struct sensorContent
 {
-    int nodeID, data, time;
-}nodeData;
+    int nodeID;  // ID of a node
+    int data;    // Data provided by node
+    int time;    // Real-time that node sends data
+};
+typedef struct sensorContent sensorContent;
 
-/* Linked list to store data */
-typedef struct dataList
+// Linked list node
+struct sensorNode
 {
-    nodeData node;
-    dataList *next;
-}dataList;
+    sensorContent content;     // The data group
+    struct sensorNode *next;   // Pointer to next node
+};
+typedef struct sensorNode sensorNode;
+
+// Define a linked list structure
+// Manages a list of sensor nodes for the shared buffer
+typedef struct linkedList
+{
+    sensorNode *head;
+    sensorNode *tail;
+    pthread_mutex_t lock;
+} linkedList;
+
 
 #endif /* _COMMON_H */
