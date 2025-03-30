@@ -1,146 +1,248 @@
 /** @file sbuffer.c
- *  @brief The shared “mailbox” for sensor data
+ *  @brief Shared data structure declarations
  *
- *  Define mailbox functions/variables
- *  sbuffer means "shared sensor buffer"
+ *  Declares data structure to store sensors data
+ *  Use circular buffer as data structure to handle data
  *
  *  @author Phuc
  *  @bug No known bugs.
  */
 
 #include "sbuffer.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <pthread.h>
+#include <error.h>
 
-// Create a node for each sensor
-sensorNode *createNode(sensorContent nodeContent)
+// Initializes the shared data structure sbuffer
+int sbuffer_init(sbuffer_t *sb, int size)
 {
-    sensorNode *sensor = malloc(sizeof(sensorNode));
-    if (!sensor)
+    // Check valid input
+    if (sb == NULL || size <= 0)
     {
-        perror("Failed to create a new sensor node");
-        return NULL;
+        perror("Invalid sensor buffer initialization");
+        return -1;
     }
-    sensor->content.data = nodeContent.data;
-    sensor->content.nodeID = nodeContent.nodeID;
-    sensor->content.time = nodeContent.time;
-    sensor->next = NULL;
-    return sensor;
+
+    // Allocate memory for buffer array
+    sb->buffer = (sensor_data_t *)malloc(size * sizeof(sensor_data_t));
+    if (sb->buffer == NULL)
+    {
+        perror("Memory allocation failed");
+        return -1;
+    }
+
+    // Initialize buffer
+    sb->size = size; // Max number of element
+    sb->head = 0;    // Start of where data will be added
+    sb->tail = 0;    // Start of where data will be removed
+    sb->count = 0;   // Empty buffer
+
+    // Mutex init
+    if (pthread_mutex_init(&sb->mutex, NULL) != 0)
+    {
+        free(sb->buffer);
+        perror("Init mutex failed");
+        return -1;
+    }
+
+    // Mutex condition signals when the buffer is not full allowing more data to be pushed
+    if (pthread_cond_init(&sb->not_full, NULL) != 0)
+    {
+        pthread_mutex_destroy(&sb->mutex);
+        free(sb->buffer);
+        perror("Init mutex condition for buffer fullness failed");
+        return -1;
+    }
+
+    // Mutex condition signals when the buffer is not empty allowing more data to be popped
+    if (pthread_cond_init(&sb->not_empty, NULL) != 0)
+    {
+        pthread_mutex_destroy(&sb->mutex);
+        free(sb->buffer);
+        perror("Init mutex condition for buffer emptiness failed");
+        return -1;
+    }
+
+    // If everything is fine, return 0
+    return 0;
 }
 
-// Initialize a linked list
-void initList(linkedList *list)
+// Add a new sensor data node to buffer
+int sbuffer_push(sbuffer_t *sb, sensor_data_t data)
 {
-    list->head = NULL;
-    list->tail = NULL;
-    pthread_mutex_init(&list->lock, NULL);
+    // Check valid input
+    if (sb == NULL)
+    {
+        perror("Invalid sensor buffer, push failed");
+        return -1;
+    }
+
+    // Lock mutex
+    if (pthread_mutex_lock(&sb->mutex) != 0)
+    {
+        perror("Mutex lock failed in push");
+        return -1;
+    }
+
+    // Check if buffer is full
+    if (sb->count == sb->size)
+    {
+        printf("Warning: Buffer full, overwriting oldest data (sensor %d)\n", data.sensor_id);
+        sb->tail = (sb->tail + 1) % sb->size;
+        sb->count--;
+
+        // Log the event saying data overwritten
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Dropped oldest data from sensor %d due to buffer full", sb->buffer[sb->tail].sensor_id);
+        log_event(msg);
+    }
+
+    // Add data to the buffer at head position
+    sb->buffer[sb->head] = data;
+    sb->head = (sb->head + 1) % sb->size;
+    sb->count++;
+
+    // Signal that data is now available (buffer is not empty)
+    if (pthread_cond_signal(&sb->not_empty) != 0)
+    {
+        perror("Signal not_empty failed in push");
+        pthread_mutex_unlock(&sb->mutex);
+        return -1;
+    }
+
+    // Unlock the mutex
+    if (pthread_mutex_unlock(&sb->mutex) != 0)
+    {
+        perror("Mutex unlock failed in push");
+        return -1;
+    }
+
+    return 0; // Success
 }
 
-// Search for a sensor node by its ID
-sensorNode *findNode(linkedList *list, int nodeID)
+// Remove a sensor data node from buffer
+int sbuffer_pop(sbuffer_t *sb, sensor_data_t *data)
 {
-    sensorNode *cur = list->head;
-
-    // Search for sensor's ID in the node
-    while(cur != NULL && cur->content.nodeID != nodeID)
+    // Check valid input
+    if (sb == NULL || data == NULL)
     {
-        cur = cur->next;
+        perror("Invalid sensor buffer or data pointer, pop failed");
+        return -1;
     }
 
-    // Returns node or NULL
-    return cur;
+    // Lock mutex
+    if (pthread_mutex_lock(&sb->mutex) != 0)
+    {
+        perror("Mutex lock failed in pop");
+        return -1;
+    }
+
+    while (sb->count == 0)
+    {
+        printf("Buffer is empty, waiting...\n");
+        if (pthread_cond_wait(&sb->not_empty, &sb->mutex) != 0)
+        {
+            pthread_mutex_unlock(&sb->mutex);
+            perror("Condition wait failed in pop");
+            return -1;
+        }
+    }
+
+    *data = sb->buffer[sb->tail];
+    sb->tail = (sb->tail + 1) % sb->size;
+    sb->count--;
+
+    if(pthread_cond_signal(&sb->not_full) != 0)
+    {
+        perror("Signal not_full failed in pop");
+        pthread_mutex_unlock(&sb->mutex);
+        return -1;
+    }
+
+    // Unlock the mutex
+    if (pthread_mutex_unlock(&sb->mutex) != 0)
+    {
+        perror("Mutex unlock failed in pop");
+        return -1;
+    }
+
+    return 0; // Success
 }
 
-// Add a sensor node to linked list
-bool addNode(linkedList *list, sensorContent nodeContent)
+// Free all nodes in buffer
+void sbuffer_free(sbuffer_t* sb)
 {
-    pthread_mutex_lock(&list->lock);
-    // Check if node exists already
-    if (findNode(list, nodeContent.nodeID) != NULL)
+    // Check valid input
+    if (sb == NULL)
     {
-        fprintf(stderr, "Node %d exists, unable to add\n", nodeContent.nodeID);
-        pthread_mutex_unlock(&list->lock);
-        return false;
+        perror("Invalid sensor buffer, sbuffer_free failed");
+        return -1;
     }
 
-    // If note doesn't exist, create one
-    sensorNode *p = createNode(nodeContent);
-    if (p == NULL)
+    // Lock mutex
+    if (pthread_mutex_lock(&sb->mutex) != 0)
     {
-        perror("Failed to create a new sensor node in addNode");
-        pthread_mutex_unlock(&list->lock);
-        return false;
+        perror("Mutex lock failed in sbuffer_free");
+        return -1;
     }
 
-    // Start adding node
-    if (list->head == NULL)
-    {
-        list->head = list->tail = p;
-    }
-    else
-    {
-        list->tail->next = p;
-        list->tail = p;
-    }
-    pthread_mutex_unlock(&list->lock);
+    // Free the buffer array (single allocation from sbuffer_init)
+    free(sb->buffer);
+    sb->buffer = NULL; // Prevent dangling pointer
+    sb->size = 0;      // Clear state
+    sb->head = 0;
+    sb->tail = 0;
+    sb->count = 0;
 
-    return true;
+    // Unlock the mutex
+    if (pthread_mutex_unlock(&sb->mutex) != 0)
+    {
+        perror("Mutex unlock failed in pop");
+        return -1;
+    }
+
+    // Destroy mutex
+    if (pthread_mutex_destroy(&sb->mutex) != 0)
+    {
+        perror("Mutex destroy failed in sbuffer_free");
+        return -1;
+    }
+    if (pthread_cond_destroy(&sb->not_full) != 0)
+    {
+        perror("Not_full condition destroy failed in sbuffer_free");
+        return -1;
+    }
+    if (pthread_cond_destroy(&sb->not_empty) != 0)
+    {
+        perror("Not_empty condition destroy failed in sbuffer_free");
+        return -1;
+    }
+
+    return 0; // Success
 }
 
-// Remove a sensor node from the linked list
-bool removeNode(linkedList *list, sensorNode *sensor)
+// Return count
+int sbuffer_count(sbuffer_t* sb, int* bufferCount)
 {
-    pthread_mutex_lock(&list->lock);
-    int nodeID = sensor->content.nodeID;
-    sensorNode *prevNode = NULL, *cur = list->head;
-
-    // Search and remove in one pass
-    while (cur != NULL && cur->content.nodeID != nodeID)
+    if (sb == NULL || bufferCount == NULL)
     {
-        prevNode = cur;
-        cur = cur->next;
+        perror("Invalid sensor buffer or bufferCount pointer, sbuffer_count failed");
+        return -1;
     }
 
-    // If not found, exit
-    if (cur == NULL)
+    // Lock mutex
+    if (pthread_mutex_lock(&sb->mutex) != 0)
     {
-        pthread_mutex_unlock(&list->lock);
-        return false;
+        perror("Mutex lock failed in sbuffer_count");
+        return -1;
     }
 
-    // Unlink node
-    if (prevNode == NULL)  // Head case
+    *bufferCount = sb->count;
+
+    // Unlock the mutex
+    if (pthread_mutex_unlock(&sb->mutex) != 0)
     {
-        list->head = cur->next;
-    }
-    else
-    {
-        prevNode->next = cur->next;
+        perror("Mutex unlock failed in sbuffer_count");
+        return -1;
     }
 
-    // Update tail if needed
-    if (cur == list->tail)
-    {
-        list->tail = prevNode;
-    }
-
-    free(cur);
-    pthread_mutex_unlock(&list->lock);
-    return true;
-}
-
-// Remove all nodes in linked list
-void removeAll(linkedList *list)
-{
-    pthread_mutex_lock(&list->lock);
-    while (list->head != NULL)
-    {
-        sensorNode *cur = list->head;
-        list->head = list->head->next;
-        free(cur);
-    }
-    list->tail = NULL;
-    pthread_mutex_unlock(&list->lock);
+    return 0; // Success
 }

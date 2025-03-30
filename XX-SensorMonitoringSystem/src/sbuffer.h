@@ -1,8 +1,8 @@
 /** @file sbuffer.h
- *  @brief Shared mailbox declarations
+ *  @brief Shared data structure declarations
  *  
- *  Declares mailbox functions/variables
- *  sbuffer means "shared sensor buffer"
+ *  Declares data structure to store sensors data
+ *  Use circular buffer as data structure to handle data
  * 
  *  @author Phuc
  *  @bug No known bugs.
@@ -11,25 +11,43 @@
 #ifndef _SBUFFER_H
 #define _SBUFFER_H
 
-#include "../include/common.h"
-#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <time.h>
 
-// Create a node for each sensor
-sensorNode *createNode(sensorContent nodeContent);
+typedef struct
+{
+    int sensor_id;
+    float temperature;
+    time_t timestamp;
+} sensor_data_t;
 
-// Initialize a linked list
-void initList(linkedList *list);
+typedef struct
+{
+    sensor_data_t* buffer;      // Array for circular buffer
+    int size;                   // Maximum number of elements
+    int head;                   // Index where next data will be added
+    int tail;                   // Index where next data will be removed
+    int count;                  // Current number of elements
+    pthread_mutex_t mutex;      // For thread safety
+    pthread_cond_t not_full;    // Signal when buffer isn’t full
+    pthread_cond_t not_empty;   // Signal when buffer isn’t empty
+} sbuffer_t;
 
-// Search for a sensor node by its ID
-sensorNode *findNode(linkedList *list, int nodeID);
+// Initializes the shared data structure sbuffer
+int sbuffer_init(sbuffer_t* sb, int size);
 
-// Add a sensor node to linked list
-bool addNode(linkedList *list, sensorContent nodeContent);
+// Add a new sensor data to buffer
+int sbuffer_push(sbuffer_t* sb, sensor_data_t data);
 
-// Remove a sensor node from the linked list
-bool removeNode(linkedList *list, sensorNode *sensor);
+// Remove a sensor data from buffer
+int sbuffer_pop(sbuffer_t* sb, sensor_data_t* data);
 
-// Remove all nodes in linked list
-void removeAll(linkedList *list);
+// Free all data element in buffer
+int sbuffer_free(sbuffer_t* sb);
+
+// Return count
+int sbuffer_count(sbuffer_t* sb, int* bufferCount);
 
 #endif /* _SBUFFER_H */
