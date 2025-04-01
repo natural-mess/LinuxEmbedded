@@ -37,7 +37,7 @@ void log_process_run(const char *fifo_path, const char *log_file)
     }
 
     // Open log for appending
-    FILE* log_fp = fopen(log_file, "a");
+    FILE *log_fp = fopen(log_file, "a");
     if (log_fp == NULL)
     {
         perror("Failed to open log file");
@@ -53,14 +53,14 @@ void log_process_run(const char *fifo_path, const char *log_file)
     ssize_t bytes_read;
 
     // Loop to read from FIFO and write to log file
-    while((bytes_read = read(fifo_fd, buffer, sizeof(buffer)-1)) > 0)
+    while ((bytes_read = read(fifo_fd, buffer, sizeof(buffer) - 1)) > 0)
     {
         buffer[bytes_read] = '\0';
 
         // Get current time
         time_t now;
-        time(&now); // Gets the current time in seconds since January 1, 1970
-        char time_str[26]; // Creates a 26-byte array to hold the formatted time
+        time(&now);              // Gets the current time in seconds since January 1, 1970
+        char time_str[26];       // Creates a 26-byte array to hold the formatted time
         ctime_r(&now, time_str); // Converts now to a human-readable string (e.g., "Wed Oct 25 14:30:00 2025\n")
         time_str[strlen(time_str) - 1] = '\0';
 
@@ -83,7 +83,7 @@ void log_process_run(const char *fifo_path, const char *log_file)
 }
 
 // Sends a log message to the FIFO
-void log_event(const char* msg)
+void log_event(const char *msg)
 {
     static int fifo_fd = -1;
     static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -127,7 +127,8 @@ void log_event(const char* msg)
             perror("Failed to write to FIFO");
         }
 
-        if (pthread_mutex_unlock(&log_mutex) != 0) {
+        if (pthread_mutex_unlock(&log_mutex) != 0)
+        {
             perror("Log mutex unlock failed");
         }
     }
