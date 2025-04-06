@@ -150,7 +150,7 @@ int sbuffer_pop(sbuffer_t *sb, sensor_data_t *data)
     sb->tail = (sb->tail + 1) % sb->size;
     sb->count--;
 
-    if(pthread_cond_signal(&sb->not_full) != 0)
+    if (pthread_cond_signal(&sb->not_full) != 0)
     {
         perror("Signal not_full failed in pop");
         pthread_mutex_unlock(&sb->mutex);
@@ -168,7 +168,7 @@ int sbuffer_pop(sbuffer_t *sb, sensor_data_t *data)
 }
 
 // Free all nodes in buffer
-void sbuffer_free(sbuffer_t* sb)
+int sbuffer_free(sbuffer_t *sb)
 {
     // Check valid input
     if (sb == NULL)
@@ -220,7 +220,7 @@ void sbuffer_free(sbuffer_t* sb)
 }
 
 // Return count
-int sbuffer_count(sbuffer_t* sb, int* bufferCount)
+int sbuffer_count(sbuffer_t *sb, int *bufferCount)
 {
     if (sb == NULL || bufferCount == NULL)
     {

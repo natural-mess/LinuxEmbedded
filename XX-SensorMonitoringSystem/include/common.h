@@ -16,24 +16,6 @@
 #define MAX_SENSORS 50
 #define TIMEOUT_SECONDS 15
 
-typedef struct
-{
-    sbuffer_t* sb;
-    int port;
-} thread_args_t;
-
-typedef struct
-{
-    int connection_id;
-    char ip[16];
-    int port;
-    time_t last_active;
-    int active;
-} connection_tracking_t;
-
-extern int conn_active_count;
-extern pthread_mutex_t conn_mutex;
-
-volatile sig_atomic_t keep_running = 1;
+volatile sig_atomic_t shutdown = 0;
 
 #endif /* _COMMON_H */
