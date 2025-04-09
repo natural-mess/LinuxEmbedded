@@ -1,22 +1,41 @@
-CC=gcc
-CFLAGS=-g -Wall -pthread -Iinclude
-LDFLAGS=-lsqlite3 -pthread
+# Compiler and flags
+CC = gcc
+CFLAGS = -g -Wall -pthread -Iinclude -Isrc
+LDFLAGS = -lsqlite3 -pthread
 
-all: sensor_gateway
+# Project structure
+SRC_DIR = src
+OBJ_DIR = build
+BIN = sensor_gateway
 
-sensor_gateway: src/main.o src/connection_manager.o src/data_manager.o src/storage_manager.o src/log_process.o src/sbuffer.o src/sensor_node.o
-	$(CC) $(LDFLAGS) -o $@ $^
+# Source and object files
+SRCS = $(wildcard $(SRC_DIR)/*.c)
+OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
 
-%.o: %.c
+# Default target
+all: $(BIN)
+
+# Build binary
+$(BIN): $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Compile source files
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Clean
 clean:
-	rm -f sensor_gateway src/*.o logs/gateway.log db/sensors.db
+	rm -f $(BIN)
+	rm -rf $(OBJ_DIR)
+	rm -f logs/gateway.log db/sensors.db
 
-run: sensor_gateway
-	./sensor_gateway 1234
+# Run
+run: $(BIN)
+	./$(BIN) 1234
 
-valgrind: sensor_gateway
-	valgrind --leak-check=full ./sensor_gateway 1234
+# Memory check
+valgrind: $(BIN)
+	valgrind --leak-check=full ./$(BIN) 1234
 
 .PHONY: all clean run valgrind
