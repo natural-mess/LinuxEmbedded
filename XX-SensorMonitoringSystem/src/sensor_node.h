@@ -1,7 +1,7 @@
 /** @file sensor_node.h
  *  @brief Simulates sensor nodes
  *
- *  Declare the sensor node simulation function 
+ *  Declare the sensor node simulation function
  *  and any necessary types.
  *
  *  @author Phuc
@@ -15,6 +15,14 @@
 #include <netinet/in.h>
 #include "../include/common.h"
 
+#define MIN_TEMP 0
+#define MAX_TEMP 50
+#define SLEEP_TIME 5
+
+// Start sensor node simulation
 void sensor_node_simulate(int port, int sensor_id, float temp, int send_count);
+
+// Send data from sensor node
+void sensor_send_data(int sock_fd, sensor_data_t* data);
 
 #endif /* SENSOR_NODE_H */
