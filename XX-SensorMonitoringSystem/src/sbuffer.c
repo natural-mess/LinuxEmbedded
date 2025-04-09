@@ -10,6 +10,7 @@
 
 #include "sbuffer.h"
 #include <error.h>
+#include "log.h"
 
 // Initializes the shared data structure sbuffer
 int sbuffer_init(sbuffer_t *sb, int size)
