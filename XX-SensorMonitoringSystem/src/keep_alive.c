@@ -7,8 +7,10 @@
  *  @bug No known bugs.
  */
 
+#include <stdio.h>
 #include <signal.h>
 #include <time.h>
+#include <unistd.h>
 #include "keep_alive.h"
 #include "log.h"
 #include "../include/common.h"
@@ -19,7 +21,7 @@ pthread_mutex_t conn_mutex;
 
 static void sigint_handler(int sig)
 {
-    shutdown = 1;
+    shutdown_flag = 1;
     write(STDERR_FILENO, "Shutdown signal received\n", 25);
 }
 
@@ -71,7 +73,7 @@ int init_keep_alive(void)
 
 int run_keep_alive(void)
 {
-    while (!shutdown)
+    while (!shutdown_flag)
     {
         sleep(10);
 
