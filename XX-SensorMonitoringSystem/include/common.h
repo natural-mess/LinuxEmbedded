@@ -11,11 +11,12 @@
 #ifndef _COMMON_H
 #define _COMMON_H
 
+#include <signal.h>
 #include "../src/sbuffer.h"
 
 #define MAX_SENSORS 50
 #define TIMEOUT_SECONDS 15
 
-volatile sig_atomic_t shutdown = 0;
+extern volatile sig_atomic_t shutdown_flag;
 
 #endif /* _COMMON_H */
