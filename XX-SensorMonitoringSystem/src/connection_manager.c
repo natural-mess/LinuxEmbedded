@@ -61,7 +61,7 @@ int setup_socket(int port)
 void handle_new_connection(int socket_fd, int *client_fds, int *client_count, fd_set *readfds)
 {
     // exit early if the program is shutting down
-    if (shutdown)
+    if (shutdown_flag)
         return;
 
     char msg[256];
@@ -125,7 +125,7 @@ void shift_clients(int *client_fds, int *client_count, int index)
 void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_set *readfds)
 {
     // exit early if the program is shutting down
-    if (shutdown)
+    if (shutdown_flag)
         return;
 
     char msg[256];
@@ -179,7 +179,7 @@ void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_se
                     return;
                 }
 
-                shift_clients(client_fds, &client_count, i);
+                shift_clients(client_fds, client_count, i);
                 i--;
             }
             else
@@ -201,7 +201,7 @@ void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_se
                     return;
                 }
 
-                shift_clients(client_fds, &client_count, i);
+                shift_clients(client_fds, client_count, i);
                 i--;
             }
         }
@@ -262,7 +262,7 @@ void *connection_manager(void *arg)
     fd_set readfds;
 
     // infinite loop to accept connections
-    while (!shutdown)
+    while (!shutdown_flag)
     {
         FD_ZERO(&readfds);
         FD_SET(socket_fd, &readfds);
