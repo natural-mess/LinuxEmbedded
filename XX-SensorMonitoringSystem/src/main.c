@@ -16,11 +16,14 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include <ctype.h>
 #include "log.h"
 #include "sbuffer.h"
 #include "../include/common.h"
 #include "threads.h"
 #include "keep_alive.h"
+
+volatile sig_atomic_t shutdown_flag = 0;
 
 int main(int argc, char *argv[])
 {
