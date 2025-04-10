@@ -21,6 +21,34 @@
 // Runs the log process to read from FIFO and write to log file
 void log_process_run(const char *fifo_path, const char *log_file)
 {
+    // Ensure the log file directory exists
+    char dir_path[256];
+    snprintf(dir_path, sizeof(dir_path), "%s", log_file);
+    char *last_slash = strrchr(dir_path, '/');
+    if (last_slash != NULL)
+    {
+        *last_slash = '\0'; // Trim to directory path
+        if (access(dir_path, F_OK) == -1)
+        {
+            if (mkdir(dir_path, 0777) == -1 && errno != EEXIST)
+            {
+                perror("Failed to create log directory");
+                exit(1);
+            }
+        }
+    }
+
+    // Check if fifo_path is in a supported filesystem
+    struct stat fs_stat;
+    if (stat(fifo_path, &fs_stat) == 0)
+    {
+        if (!S_ISREG(fs_stat.st_mode) && !S_ISDIR(fs_stat.st_mode))
+        {
+            fprintf(stderr, "FIFO path %s is not on a regular filesystem\n", fifo_path);
+            exit(1);
+        }
+    }
+
     // Create named pipe FIFO if it doesn't exist
     if (mkfifo(fifo_path, 0666) == -1 && errno != EEXIST)
     {
@@ -37,13 +65,16 @@ void log_process_run(const char *fifo_path, const char *log_file)
     }
 
     // Open log for appending
-    FILE *log_fp = fopen(log_file, "a");
+    FILE *log_fp = fopen(log_file, "a+");
     if (log_fp == NULL)
     {
         perror("Failed to open log file");
         close(fifo_fd);
         exit(1);
     }
+
+    // Ensure the file has the correct permissions
+    chmod(log_file, 0666); // Set permissions to match FIFO
 
     // static variable to track number of log entries
     static unsigned int seq_num = 1;
@@ -74,11 +105,19 @@ void log_process_run(const char *fifo_path, const char *log_file)
     if (bytes_read == -1)
     {
         perror("Error reading from FIFO");
+        log_event("FIFO read error, shutting down log process");
     }
 
     // Clean up
-    fclose(log_fp);
-    close(fifo_fd);
+    if (fclose(log_fp) != 0)
+    {
+        perror("Failed to close log file");
+    }
+    if (close(fifo_fd) != 0)
+    {
+        perror("Failed to close FIFO");
+    }
+
     exit(0);
 }
 
