@@ -15,8 +15,10 @@
 #include "log.h"
 #include "threads.h"
 
+// Define configurable thresholds (could be passed via config)
 #define TOO_HOT 40.0
 #define TOO_COLD 18.0
+#define RESET_THRESHOLD_SECONDS 3600 // Reset average after 1 hour of inactivity
 
 typedef struct
 {
@@ -25,8 +27,9 @@ typedef struct
     time_t last_update; // Last time updated (optional, for debugging)
 } sensor_avg_t;
 
-static sensor_avg_t sensor_averages[MAX_SENSORS] = {0}; // Initialize to zero
-static pthread_mutex_t avg_mutex = PTHREAD_MUTEX_INITIALIZER; // For thread safety
+// Global variables (make extern if needed in other files)
+extern sensor_avg_t sensor_averages[MAX_SENSORS];
+extern pthread_mutex_t avg_mutex;
 
 void *data_manager(void *arg);
 
