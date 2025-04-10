@@ -10,7 +10,7 @@
 #ifndef LOG_PROCESS_H
 #define LOG_PROCESS_H
 
-#define LOG_FIFO "logFifo" // Default FIFO name
+#define LOG_FIFO "/tmp/logFifo" // Default FIFO name
 #define LOG_FIFO_PATH "logs/gateway.log"
 
 // Runs the log process to read from FIFO and write to log file
