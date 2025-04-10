@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <pthread.h>
 #include <ctype.h>
 #include "log.h"
@@ -30,15 +31,18 @@ int main(int argc, char *argv[])
     // Read port number from command line
     if (argc < 2)
     {
-        printf("No port provided\ncommand: ./sensor_gateway <port number>\n");
+        fprintf(stderr, "No port provided\nUsage: %s <port number>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    // Check port validity
-    int portNum = atoi(argv[1]);
-    if (portNum < 1024 || portNum > 65535 || !isdigit(portNum))
+    char *endptr;
+    errno = 0;
+    long portNum = strtol(argv[1], &endptr, 10); // Use strtol for robust conversion
+
+    // Check for conversion errors
+    if (errno == ERANGE || *endptr != '\0' || portNum < 1 || portNum > 65535)
     {
-        perror("Invalid port number");
+        fprintf(stderr, "Invalid port number: %s\n", argv[1]);
         exit(EXIT_FAILURE);
     }
 
@@ -50,12 +54,13 @@ int main(int argc, char *argv[])
         if (0 == log_pid)
         {
             log_process_run(LOG_FIFO, LOG_FIFO_PATH);
+            exit(EXIT_SUCCESS);
         }
         else
         {
             // Log startup
             char msg[256];
-            snprintf(msg, sizeof(msg), "Sensor gateway started on port %d", portNum);
+            snprintf(msg, sizeof(msg), "Sensor gateway started on port %d", (int)portNum);
             log_event(msg);
 
             // Initialize sensor buffer
@@ -67,7 +72,7 @@ int main(int argc, char *argv[])
             }
 
             // Create and init threads connection, data, storage
-            init_threads(sb, portNum);
+            init_threads(sb, (int)portNum);
 
             // Init keep-alive
             if (init_keep_alive() != 0)
@@ -102,6 +107,24 @@ int main(int argc, char *argv[])
             }
 
             free(sb);
+
+            // Wait for and clean up log process
+            if (log_pid > 0)
+            {
+                kill(log_pid, SIGTERM); // Ensure child is signaled to exit
+                int status;
+                if (waitpid(log_pid, &status, 0) == -1)
+                {
+                    perror("Failed to wait for log process");
+                    log_event("Failed to wait for log process");
+                }
+                else
+                {
+                    log_event("Log process terminated");
+                }
+            }
+
+            log_event("Sensor gateway shut down successfully");
             exit(EXIT_SUCCESS);
         }
     }
