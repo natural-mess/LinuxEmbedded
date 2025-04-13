@@ -17,6 +17,8 @@
 #define MAX_SENSORS 50
 #define TIMEOUT_SECONDS 15
 
+#define MAX_RETRIES 3
+
 extern volatile sig_atomic_t shutdown_flag;
 
 #endif /* _COMMON_H */

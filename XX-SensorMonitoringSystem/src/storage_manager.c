@@ -11,13 +11,34 @@
 #include <stdlib.h>
 #include <sqlite3.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <string.h>
+#include <time.h>
 #include "storage_manager.h"
-#include "common.h"
+#include "../include/common.h"
 #include "log.h"
 #include "threads.h"
 
-static const char *DB_PATH = "db/sensors.db";
-#define MAX_RETRIES 3
+#ifdef _WIN32
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#define PATH_SEPARATOR "\\"
+#else
+#include <errno.h>
+#define mkdir(path, mode) mkdir(path, mode)
+#define PATH_SEPARATOR "/"
+#endif
+
+static const char *DB_DIR = "db";
+static const char *DB_NAME = "sensors.db";
+
+static void sqlite_error_log_callback(void *pArg, int iErrCode, const char *zMsg)
+{
+    char msg[512]; // Increased size for safety
+    snprintf(msg, sizeof(msg), "SQLite error %d: %s", iErrCode, zMsg);
+    log_event(msg);
+}
 
 void *storage_manager(void *arg)
 {
@@ -26,43 +47,90 @@ void *storage_manager(void *arg)
     sqlite3 *db = NULL;
     sqlite3_stmt *stmt = NULL;
 
-    // Open or create the database
-    if (sqlite3_open(DB_PATH, &db) != SQLITE_OK)
+    // Enable SQLite error logging
+    sqlite3_config(SQLITE_CONFIG_LOG, sqlite_error_log_callback, NULL);
+    sqlite3_initialize();
+
+    // Construct database path
+    char db_path[256];
+    snprintf(db_path, sizeof(db_path), "%s%s%s", DB_DIR, PATH_SEPARATOR, DB_NAME);
+
+    // Log the database path for debugging
+    char msg[512]; // Increased from 256 to 512 to avoid truncation warnings
+    snprintf(msg, sizeof(msg), "Attempting to open database at %s", db_path);
+    log_event(msg);
+
+    // Ensure the directory exists
+    if (access(DB_DIR, F_OK) == -1)
     {
-        log_event("Failed to open database");
-        goto cleanup;
+        if (mkdir(DB_DIR, 0777) == -1 && errno != EEXIST)
+        {
+            perror("Failed to create database directory");
+            snprintf(msg, sizeof(msg), "Failed to create database directory: %s", strerror(errno));
+            log_event(msg);
+            return NULL;
+        }
     }
-    log_event("Connection to SQL server established");
+
+    // Open or create the database
+    int rc = sqlite3_open(db_path, &db);
+    if (rc != SQLITE_OK)
+    {
+        snprintf(msg, sizeof(msg), "Failed to open database at %s: %s", db_path, sqlite3_errmsg(db));
+        log_event(msg);
+        printf("SQLite error: %s\n", sqlite3_errmsg(db));
+        if (db)
+            sqlite3_close(db);
+        return NULL;
+    }
+
+    snprintf(msg, sizeof(msg), "Connected to database %s", db_path);
+    log_event(msg);
+    time_t now = time(NULL);
+    char time_str[26];
+    ctime_r(&now, time_str);
+    time_str[strlen(time_str) - 1] = '\0';
+    printf("%s: Connected to database %s\n", time_str, db_path);
 
     // Create table if it doesn't exist
-    static const char *CREATE_TABLE = "CREATE TABLE IF NOT EXISTS measurements (id INTEGER, temp REAL, time INTEGER);";
+    static const char *CREATE_TABLE =
+        "CREATE TABLE IF NOT EXISTS measurements ("
+        "id INTEGER NOT NULL, "
+        "temp REAL NOT NULL, "
+        "time INTEGER NOT NULL"
+        ");";
     char *err_msg = NULL;
     if (sqlite3_exec(db, CREATE_TABLE, NULL, NULL, &err_msg) != SQLITE_OK)
     {
+        snprintf(msg, sizeof(msg), "Failed to create table: %s", err_msg);
+        log_event(msg);
         printf("Failed to create table: %s\n", err_msg);
-        log_event("Failed to create table");
         sqlite3_free(err_msg);
-        goto cleanup;
+        sqlite3_close(db);
+        return NULL;
     }
     log_event("New table measurements created or already exists");
+    now = time(NULL);
+    ctime_r(&now, time_str);
+    time_str[strlen(time_str) - 1] = '\0';
+    printf("%s: Table measurements ready\n", time_str);
 
     // Main loop
     while (!shutdown_flag)
     {
         sensor_data_t data;
 
-        // Check for shutdown before blocking on sbuffer_pop
         if (shutdown_flag)
             break;
 
-        // Pop data from sbuffer with retry logic
         int pop_retries = 0;
         while (pop_retries < MAX_RETRIES && sbuffer_pop(sb, &data) != 0)
         {
-            char msg[256];
+            if (shutdown_flag)
+                goto cleanup;
             snprintf(msg, sizeof(msg), "Failed to pop data from sbuffer, retry %d/%d", pop_retries + 1, MAX_RETRIES);
             log_event(msg);
-            sleep(1); // Brief pause before retry
+            sleep(1);
             pop_retries++;
         }
 
@@ -72,15 +140,13 @@ void *storage_manager(void *arg)
             continue;
         }
 
-        // Prepare insert statement
         static const char *INSERT_STMT = "INSERT INTO measurements VALUES (?, ?, ?);";
         int prepare_retries = 0;
         while (prepare_retries < MAX_RETRIES && sqlite3_prepare_v2(db, INSERT_STMT, -1, &stmt, NULL) != SQLITE_OK)
         {
-            char msg[256];
             snprintf(msg, sizeof(msg), "Failed to prepare insert statement, retry %d/%d", prepare_retries + 1, MAX_RETRIES);
             log_event(msg);
-            sleep(1); // Brief pause before retry
+            sleep(1);
             prepare_retries++;
         }
 
@@ -90,7 +156,6 @@ void *storage_manager(void *arg)
             continue;
         }
 
-        // Bind values
         if (sqlite3_bind_int(stmt, 1, data.sensor_id) != SQLITE_OK ||
             sqlite3_bind_double(stmt, 2, data.temperature) != SQLITE_OK ||
             sqlite3_bind_int64(stmt, 3, (sqlite3_int64)data.timestamp) != SQLITE_OK)
@@ -99,14 +164,12 @@ void *storage_manager(void *arg)
             goto cleanup_stmt;
         }
 
-        // Execute statement with retries
         int step_retries = 0;
         while (step_retries < MAX_RETRIES && sqlite3_step(stmt) != SQLITE_DONE)
         {
-            char msg[256];
             snprintf(msg, sizeof(msg), "Failed to insert row, retry %d/%d", step_retries + 1, MAX_RETRIES);
             log_event(msg);
-            sleep(1); // Brief pause before retry
+            sleep(1);
             step_retries++;
         }
 
@@ -124,15 +187,13 @@ void *storage_manager(void *arg)
             sqlite3_finalize(stmt);
             stmt = NULL;
         }
-
-        // Check for shutdown again after processing
-        if (shutdown_flag)
-            break;
     }
 
 cleanup:
     if (stmt)
+    {
         sqlite3_finalize(stmt);
+    }
     if (db && sqlite3_close(db) != SQLITE_OK)
     {
         log_event("Failed to close database");

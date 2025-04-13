@@ -20,6 +20,11 @@
 #define TOO_COLD 18.0
 #define RESET_THRESHOLD_SECONDS 3600 // Reset average after 1 hour of inactivity
 
+// Minimum readings required before averaging and alerting
+#define MIN_AVG_COUNT 5
+// Minimum time between alerts for the same sensor (seconds)
+#define ALERT_COOLDOWN 60
+
 typedef struct
 {
     float sum;        // Sum of temperatures for running average

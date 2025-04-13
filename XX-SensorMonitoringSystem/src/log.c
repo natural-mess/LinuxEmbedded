@@ -1,4 +1,4 @@
-/** @file log_process.c
+/** @file log.c
  *  @brief Implementation of the log process
  *
  *  Handles logging events received via FIFO and writes them to gateway.log
@@ -38,17 +38,6 @@ void log_process_run(const char *fifo_path, const char *log_file)
         }
     }
 
-    // Check if fifo_path is in a supported filesystem
-    struct stat fs_stat;
-    if (stat(fifo_path, &fs_stat) == 0)
-    {
-        if (!S_ISREG(fs_stat.st_mode) && !S_ISDIR(fs_stat.st_mode))
-        {
-            fprintf(stderr, "FIFO path %s is not on a regular filesystem\n", fifo_path);
-            exit(1);
-        }
-    }
-
     // Create named pipe FIFO if it doesn't exist
     if (mkfifo(fifo_path, 0666) == -1 && errno != EEXIST)
     {
@@ -80,7 +69,9 @@ void log_process_run(const char *fifo_path, const char *log_file)
     static unsigned int seq_num = 1;
 
     // Buffer to read log messages from FIFO
-    char buffer[256];
+    char buffer[4096]; // Increased buffer size to handle larger reads
+    char *line;
+    char *saveptr = NULL;
     ssize_t bytes_read;
 
     // Loop to read from FIFO and write to log file
@@ -88,24 +79,31 @@ void log_process_run(const char *fifo_path, const char *log_file)
     {
         buffer[bytes_read] = '\0';
 
-        // Get current time
-        time_t now;
-        time(&now);              // Gets the current time in seconds since January 1, 1970
-        char time_str[26];       // Creates a 26-byte array to hold the formatted time
-        ctime_r(&now, time_str); // Converts now to a human-readable string (e.g., "Wed Oct 25 14:30:00 2025\n")
-        time_str[strlen(time_str) - 1] = '\0';
+        // Process each line in the buffer
+        line = strtok_r(buffer, "\n", &saveptr);
+        while (line != NULL)
+        {
+            // Get current time
+            time_t now;
+            time(&now);
+            char time_str[26];
+            ctime_r(&now, time_str);
+            time_str[strlen(time_str) - 1] = '\0';
 
-        // Write log entry
-        fprintf(log_fp, "%u %s %s\n", seq_num++, time_str, buffer);
-        // Forces any buffered data in log_fp to be written to the file immediately
-        fflush(log_fp);
+            // Write log entry
+            fprintf(log_fp, "%u %s %s\n", seq_num++, time_str, line);
+            fflush(log_fp);
+
+            // Get the next line
+            line = strtok_r(NULL, "\n", &saveptr);
+        }
     }
 
     // If read fails or EOF, exit
     if (bytes_read == -1)
     {
         perror("Error reading from FIFO");
-        log_event("FIFO read error, shutting down log process");
+        log_event("FIFO read error, shutting down log process\n");
     }
 
     // Clean up
@@ -127,48 +125,42 @@ void log_event(const char *msg)
     static int fifo_fd = -1;
     static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-    // Initialize FIFO
+    if (pthread_mutex_lock(&log_mutex) != 0)
+    {
+        perror("Log mutex lock failed");
+        return;
+    }
+
+    // Initialize FIFO if not already open
     if (fifo_fd == -1)
     {
-        if (pthread_mutex_lock(&log_mutex) != 0)
-        {
-            perror("Log mutex lock failed");
-            return;
-        }
-
-        fifo_fd = open(LOG_FIFO, O_WRONLY | O_NONBLOCK);
-        if (fifo_fd == -1 && errno != ENXIO)
+        // Open FIFO in read-write mode so writer doesn't fail if no reader is attached
+        fifo_fd = open(LOG_FIFO, O_RDWR | O_NONBLOCK);
+        if (fifo_fd == -1)
         {
             perror("Failed to open FIFO for writing");
             pthread_mutex_unlock(&log_mutex);
             return;
         }
-
-        if (pthread_mutex_unlock(&log_mutex) != 0)
-        {
-            perror("Log mutex unlock failed");
-            return;
-        }
     }
+
+    // Create message with newline
+    char msg_with_newline[256];
+    snprintf(msg_with_newline, sizeof(msg_with_newline), "%s\n", msg);
 
     // Write message to FIFO
     if (fifo_fd != -1)
     {
-        if (pthread_mutex_lock(&log_mutex) != 0)
-        {
-            perror("Log mutex lock failed");
-            return;
-        }
-
-        ssize_t bytes_written = write(fifo_fd, msg, strlen(msg));
+        ssize_t bytes_written = write(fifo_fd, msg_with_newline, strlen(msg_with_newline));
         if (bytes_written == -1)
         {
             perror("Failed to write to FIFO");
         }
+    }
 
-        if (pthread_mutex_unlock(&log_mutex) != 0)
-        {
-            perror("Log mutex unlock failed");
-        }
+    if (pthread_mutex_unlock(&log_mutex) != 0)
+    {
+        perror("Log mutex unlock failed");
+        return;
     }
 }

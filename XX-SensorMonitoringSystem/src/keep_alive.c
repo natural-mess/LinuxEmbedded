@@ -11,9 +11,10 @@
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
+#include "../include/common.h"
 #include "keep_alive.h"
 #include "log.h"
-#include "../include/common.h"
 
 connection_tracking_t connections[MAX_SENSORS];
 int conn_active_count = 0;
@@ -21,7 +22,11 @@ pthread_mutex_t conn_mutex;
 
 static void sigint_handler(int sig)
 {
+    pthread_mutex_lock(&conn_mutex);
     shutdown_flag = 1;
+    pthread_mutex_unlock(&conn_mutex);
+    
+    log_event("Received SIGINT, initiating shutdown");
     write(STDERR_FILENO, "Shutdown signal received\n", 25);
 }
 
@@ -91,7 +96,13 @@ int run_keep_alive(void)
                 char msg[256];
                 snprintf(msg, sizeof(msg), "Sensor node with %d has disconnected (keep-alive timeout)", connections[i].connection_id);
                 log_event(msg);
-                printf("Sensor node with %d has disconnected (keep-alive timeout)", connections[i].connection_id);
+
+                // Print to terminal
+                time_t now = time(NULL);
+                char time_str[26];
+                ctime_r(&now, time_str);
+                time_str[strlen(time_str) - 1] = '\0';
+                printf("%s: Connection %d closed (timeout)\n", time_str, connections[i].connection_id);
                 connections[i].active = 0;
                 remove_connection(i);
                 i--;

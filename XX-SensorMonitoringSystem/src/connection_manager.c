@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <time.h>
+#include <string.h>
+#include "../include/common.h"
 #include "keep_alive.h"
 #include "connection_manager.h"
 #include "threads.h"
@@ -20,7 +22,6 @@
 // Handle socket creation, binding, and listening.
 int setup_socket(int port)
 {
-    // Create a TCP socket
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd == -1)
     {
@@ -29,13 +30,11 @@ int setup_socket(int port)
         return -1;
     }
 
-    // Setup server address
     struct sockaddr_in serv_addr;
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
-    serv_addr.sin_addr.s_addr = INADDR_ANY; // listen on all interfaces
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
 
-    // Bind socket
     if (bind(socket_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1)
     {
         close(socket_fd);
@@ -44,8 +43,6 @@ int setup_socket(int port)
         return -1;
     }
 
-    // Listen for connections
-    // SOMAXCONN : max pending connections
     if (listen(socket_fd, SOMAXCONN) == -1)
     {
         close(socket_fd);
@@ -60,13 +57,11 @@ int setup_socket(int port)
 // Manage accept and add to client_fds/connections
 void handle_new_connection(int socket_fd, int *client_fds, int *client_count, fd_set *readfds)
 {
-    // exit early if the program is shutting down
     if (shutdown_flag)
         return;
 
     char msg[256];
 
-    // New connection
     if (FD_ISSET(socket_fd, readfds))
     {
         int client_fd = accept(socket_fd, NULL, NULL);
@@ -101,6 +96,12 @@ void handle_new_connection(int socket_fd, int *client_fds, int *client_count, fd
 
             snprintf(msg, sizeof(msg), "A sensor node with %d has opened a new connection", client_fd);
             log_event(msg);
+            // Print to terminal
+            time_t now = time(NULL);
+            char time_str[26];
+            ctime_r(&now, time_str);
+            time_str[strlen(time_str) - 1] = '\0';
+            printf("%s: Connection %d established\n", time_str, client_fd);
         }
         else
         {
@@ -124,7 +125,6 @@ void shift_clients(int *client_fds, int *client_count, int index)
 // Read data, push to sbuffer, update last_active, close if needed.
 void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_set *readfds)
 {
-    // exit early if the program is shutting down
     if (shutdown_flag)
         return;
 
@@ -138,9 +138,17 @@ void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_se
             ssize_t bytes = read(client_fds[i], &sdata, sizeof(sensor_data_t));
             if (bytes > 0)
             {
+                snprintf(msg, sizeof(msg), "Received data: sensor_id=%d, temp=%.2f, time=%ld",
+                         sdata.sensor_id, sdata.temperature, sdata.timestamp);
+                log_event(msg);
+
                 if (sbuffer_push(sb, sdata) != 0)
                 {
                     log_event("Failed to push data to sbuffer");
+                }
+                else
+                {
+                    log_event("Data successfully pushed to sbuffer");
                 }
 
                 if (pthread_mutex_lock(&conn_mutex) != 0)
@@ -150,7 +158,6 @@ void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_se
                     return;
                 }
 
-                // Update last active time
                 connections[i].last_active = time(NULL);
 
                 if (pthread_mutex_unlock(&conn_mutex) != 0)
@@ -164,6 +171,12 @@ void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_se
             {
                 snprintf(msg, sizeof(msg), "The sensor node with %d has closed the connection", client_fds[i]);
                 log_event(msg);
+                // Print to terminal
+                time_t now = time(NULL);
+                char time_str[26];
+                ctime_r(&now, time_str);
+                time_str[strlen(time_str) - 1] = '\0';
+                printf("%s: Connection %d closed\n", time_str, client_fds[i]);
 
                 if (pthread_mutex_lock(&conn_mutex) != 0)
                 {
@@ -171,7 +184,9 @@ void handle_client_data(int *client_fds, int *client_count, sbuffer_t *sb, fd_se
                     log_event("Mutex lock failed in connection manager");
                     return;
                 }
+
                 remove_connection(i);
+
                 if (pthread_mutex_unlock(&conn_mutex) != 0)
                 {
                     perror("Conn mutex unlock failed in connection manager");
@@ -243,7 +258,6 @@ void *connection_manager(void *arg)
 {
     thread_args_t *data = (thread_args_t *)arg;
 
-    // Log startup of connection
     char msg[256];
     snprintf(msg, sizeof(msg), "Connection manager started on port %d", data->port);
     log_event(msg);
@@ -256,19 +270,16 @@ void *connection_manager(void *arg)
         exit(EXIT_FAILURE);
     }
 
-    // init client_fds
     int client_fds[MAX_SENSORS] = {-1};
     int client_count = 0;
     fd_set readfds;
 
-    // infinite loop to accept connections
     while (!shutdown_flag)
     {
         FD_ZERO(&readfds);
         FD_SET(socket_fd, &readfds);
         int max_fd = socket_fd;
 
-        // Add existing clients
         for (int i = 0; i < client_count; i++)
         {
             if (client_fds[i] != -1)
@@ -281,24 +292,22 @@ void *connection_manager(void *arg)
             }
         }
 
-        // select waits for any FD to be ready.
         int select_result = select(max_fd + 1, &readfds, NULL, NULL, NULL);
         if (select_result > 0)
         {
             handle_new_connection(socket_fd, client_fds, &client_count, &readfds);
             handle_client_data(client_fds, &client_count, data->sb, &readfds);
         }
-        else if (select_result == -1)
+        else if (select_result == -1 && !shutdown_flag)
         {
             log_event("Select failed");
         }
         else if (select_result == 0)
         {
-            log_event("Select timed out");
+            continue;
         }
     }
 
-    // Clean up on shutdown
     cleanup_connections(client_fds, client_count, socket_fd);
 
     return NULL;

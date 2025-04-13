@@ -24,21 +24,21 @@ static volatile int should_exit = 0;
 static void signal_handler(int sig)
 {
     should_exit = 1;
-    printf("Sensor node received shutdown signal");
+    printf("Sensor node received shutdown signal\n");
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char *argv[])
 {
     int portNum, sensor_id, send_count = -1;
-    float temp;
 
-    if (argc >= 4)
+    if (argc >= 3)
     {
         for (int i = 0; argv[1][i]; i++)
         {
             if (!isdigit(argv[1][i]))
             {
-                printf("Usage: ./sensor_node <port> <sensor_id> <temp> [send_count]\n");
+                printf("Usage: ./sensor_node <port> <sensor_id> [send_count]\n");
                 exit(EXIT_FAILURE);
             }
         }
@@ -57,9 +57,7 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
-        temp = atof(argv[3]);
-
-        send_count = atoi(argv[4]);
+        send_count = atoi(argv[3]);
         if (send_count < -1)
         {
             perror("Invalid send counter");
@@ -67,11 +65,11 @@ int main(int argc, char *argv[])
         }
 
         // Create socket connection to gateway
-        sensor_node_simulate(portNum, sensor_id, temp, send_count);
+        sensor_node_simulate(portNum, sensor_id, send_count);
     }
     else
     {
-        printf("Usage: ./sensor_node <port> <sensor_id> <temp> [send_count]\n");
+        printf("Usage: ./sensor_node <port> <sensor_id> [send_count]\n");
         exit(EXIT_FAILURE);
     }
 
@@ -81,6 +79,10 @@ int main(int argc, char *argv[])
 // Send data from sensor node
 void sensor_send_data(int sock_fd, sensor_data_t *data)
 {
+    // Update temperature each time
+    data->temperature = MIN_TEMP + (rand() % (int)(MAX_TEMP - MIN_TEMP + 1)) + (rand() / (RAND_MAX + 1.0));
+    data->timestamp = time(NULL);
+
     // Send data
     int send_byte = write(sock_fd, data, sizeof(sensor_data_t));
     if (send_byte == sizeof(sensor_data_t))
@@ -98,14 +100,10 @@ void sensor_send_data(int sock_fd, sensor_data_t *data)
         perror("Failed to send data");
         exit(EXIT_FAILURE);
     }
-
-    // Update temperature each time
-    data->temperature = MIN_TEMP + (rand() % (int)(MAX_TEMP - MIN_TEMP + 1)) + (rand() / (RAND_MAX + 1.0));
-    data->timestamp = time(NULL);
 }
 
 // Start sensor node simulation
-void sensor_node_simulate(int port, int sensor_id, float temp, int send_count)
+void sensor_node_simulate(int port, int sensor_id, int send_count)
 {
     // Create socket
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -121,7 +119,7 @@ void sensor_node_simulate(int port, int sensor_id, float temp, int send_count)
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    if (connect(sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) <= 0)
+    if (connect(sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
         perror("Failed to connect to gateway");
         exit(EXIT_FAILURE);
@@ -133,7 +131,7 @@ void sensor_node_simulate(int port, int sensor_id, float temp, int send_count)
     // Prepare data to send to gateway
     sensor_data_t data;
     data.sensor_id = sensor_id;
-    data.temperature = temp;
+    data.temperature = 0;
     data.timestamp = time(NULL);
 
     // Seed random
