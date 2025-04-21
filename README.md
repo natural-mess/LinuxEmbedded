@@ -19,7 +19,7 @@
 
 ## Course 2 - Yocto
 
-
+[Yocto](Course2-Yocto/README.md)
 
 ---
 
