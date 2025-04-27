@@ -25,4 +25,4 @@
 
 ## Course 3 - Linux device driver
 
-*(comming soon)*
+1. [Kernel Modules and Character device drivers](Course3-LinuxDeviceDriver/01-KernelModulesAndCharacterDeviceDrivers/)
