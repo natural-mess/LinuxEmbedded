@@ -26,3 +26,5 @@
 ## Course 3 - Linux device driver
 
 1. [Kernel Modules and Character device drivers](Course3-LinuxDeviceDriver/01-KernelModulesAndCharacterDeviceDrivers/)
+2. [GPIO-Driver (legacy)](Course3-LinuxDeviceDriver/02-GPIO-Driver-legacy/)
+3. [GPIO Subsystem (integer)](Course3-LinuxDeviceDriver/03-GPIO-Subsystem-Integer/)

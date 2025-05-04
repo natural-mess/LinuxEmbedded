@@ -1,4 +1,4 @@
-# Kernel Modules and Character Device Drivers
+# 1 - Kernel Modules and Character Device Drivers
 
 ## Kernel module
 - A kernel module is a piece of code you can load into the Linux kernel (the core of the operating system) to add new functionality without restarting the system.

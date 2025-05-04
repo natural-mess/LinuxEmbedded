@@ -5,7 +5,7 @@
 #include <linux/uaccess.h> /* Define copy_to_user(), copy_from_user() */
 #include <linux/slab.h>    /* Define kfree() */
 
-#define DRIVER_AUTHOR "Phuc"
+#define DRIVER_AUTHOR "Rocky"
 #define DRIVER_DESC "Read and write data from and to kernel"
 #define DRIVER_VERS "1.0"
 
